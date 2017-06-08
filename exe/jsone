@@ -35,8 +35,8 @@ module JSONe
       key
     end
     
-    def self.encrypt_file(path, key, inplace: false)
-      JSONe.encrypt_file(path, key, inplace: inplace)
+    def self.encrypt_file(path, key)
+      JSONe.encrypt_file(path, key)
     rescue JSON::ParserError => e
       STDERR.puts "#{path}: parse error: #{e.message}"
     end
@@ -101,13 +101,12 @@ command :encrypt do |c|
   c.syntax = 'jsone encrypt FILE...'
   c.summary = 'Encrypts FILE with '
   c.option '--key KEY', "Use KEY (default is #{ENV['JSONE_KEY']}"
-  c.option '--inplace', "Replace file content"
   c.action do |args, options|
     check_args! :encrypt, args, 0
 
     key = JSONe::Cli.get_key(options.key)
     JSONe::Cli.process_args(args) do |path|
-      JSONe::Cli.encrypt_file(path, key, inplace: options.inplace)
+      JSONe::Cli.encrypt_file(path, key)
     end
   end
 end
