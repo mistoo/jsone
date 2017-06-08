@@ -5,8 +5,9 @@ require 'rbnacl'
 require 'hashdiff'
 
 module JSONe
-  PUBLICKEY_KEY = "__jsone_public_key".freeze
-  CIPHER_PREFIX = "__!jsone__".freeze
+  PUBLICKEY_KEY = "__jsone_public_key"
+  ARRAY_KEY = "__jsone_array"
+  CIPHER_PREFIX = "__!jsone__"
   KEYDIR = ENV['JSONE_KEYDIR'] || "/etc/jsone/keys"
   @verbose = 0
   
@@ -63,7 +64,7 @@ module JSONe
     encrypted = {}
     hash.each do |key, val|
       skey = key.to_s
-      if skey.start_with?('__')
+      if skey != ARRAY_KEY && skey.start_with?('__')
         # noop
       elsif val.is_a?(String) && !val.start_with?(CIPHER_PREFIX)
         cipher = Base64.encode64(box.encrypt(val))
@@ -134,7 +135,7 @@ module JSONe
       
     if encrypted[PUBLICKEY_KEY] == to_hex(key.public_key)
       if diff.size.zero?
-        log{ "* #{path}: file unchanged" }
+        log{ "* #{enc_path}: file unchanged" }
         hash = {}
       else
         hash = HashDiff.patch!(encrypted, diff)
@@ -143,8 +144,11 @@ module JSONe
     hash
   end
 
-  def self.encrypt_file(path, key = nil, force: false)
+  def self.encrypt_file(path, key = nil, force: false, output: nil)
     hash = JSON.parse(File.read(path))
+    if hash.is_a?(Array)
+      hash = Hash[ARRAY_KEY, hash]
+    end
     key = key_from_hash(hash) if key.nil?
 
     dest = "#{path}e"
@@ -162,12 +166,17 @@ module JSONe
 
     log{ "* encrypting #{path} with #{to_hex(key.public_key)}" }
     encrypted = encrypt(hash, key)
-
-    File.write(dest, JSON.pretty_generate(encrypted))
-    dest
+    
+    if output.is_a?(IO)
+      output.puts JSON.pretty_generate(encrypted)
+      nil
+    else
+      File.write(dest, JSON.pretty_generate(encrypted))
+      dest
+    end
   end
 
-  def self.decrypt_file(path, stdout: false)
+  def self.decrypt_file(path, output: nil)
     unless path.end_with?('.jsone')
       raise ArgumentError, "encrypted file must have .jsone extension"
     end
@@ -177,11 +186,18 @@ module JSONe
     log{ "* decrypting #{path}" }
     hash = JSON.parse(File.read(path))
     decrypted = decrypt(hash)
-
-    if hash != decrypted
-      File.write(dest, JSON.pretty_generate(decrypted))
+    
+    if decrypted.has_key?(ARRAY_KEY)
+      decrypted = decrypted[ARRAY_KEY]
     end
-    dest
+    
+    if output.is_a?(IO)
+      output.puts JSON.pretty_generate(decrypted)
+      nil
+    else
+      File.write(dest, JSON.pretty_generate(decrypted))
+      dest
+    end    
   end
 end
   

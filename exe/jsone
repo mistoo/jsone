@@ -14,8 +14,13 @@ program :version, JSONe::VERSION
 program :description, 'jsone - JSON encrypted'
 program :help_formatter, :compact
 
-global_option('--verbose LEVEL', 'Verbosity') do |level| 
-  JSONe.verbose = level.to_i || 1 
+global_option('--verbose', 'Verbosity') do
+  JSONe.verbose = 1
+end
+
+$output = nil
+global_option('-1', '--stdout', 'Print result on stdout') do 
+  $output = STDOUT
 end
 
 
@@ -35,14 +40,14 @@ module JSONe
       key
     end
     
-    def self.encrypt_file(path, key)
-      JSONe.encrypt_file(path, key)
+    def self.encrypt_file(path, key, force: false)
+      JSONe.encrypt_file(path, key, output: $output, force: force)
     rescue JSON::ParserError => e
       STDERR.puts "#{path}: parse error: #{e.message}"
     end
 
     def self.decrypt_file(path)
-      JSONe.decrypt_file(path)
+      JSONe.decrypt_file(path, output: $output)
     rescue JSON::ParserError => e
       STDERR.puts "#{path}: parse error: #{e.message}"
     end
@@ -101,12 +106,13 @@ command :encrypt do |c|
   c.syntax = 'jsone encrypt FILE...'
   c.summary = 'Encrypts FILE with '
   c.option '--key KEY', "Use KEY (default is #{ENV['JSONE_KEY']}"
+  c.option '--force', "Force re-encryption already encrypted values"
   c.action do |args, options|
     check_args! :encrypt, args, 0
 
     key = JSONe::Cli.get_key(options.key)
     JSONe::Cli.process_args(args) do |path|
-      JSONe::Cli.encrypt_file(path, key)
+      JSONe::Cli.encrypt_file(path, key, force: options.force)
     end
   end
 end
