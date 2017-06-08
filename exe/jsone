@@ -78,26 +78,23 @@ end
 
 command :keygen do |c|
   c.syntax = 'jsone keygen SURVEY'
-  c.summary = 'Generates new key pair'
-  c.option '-w', "Write key to #{JSONe::KEYDIR}"
+  c.summary = 'Generate key pair'
   c.option '--env', "Add generated key to .env"
   c.action do |args, options|
     check_args! :keygen, args, 0
     key = JSONe.gen_key
-    if options.w
-      path = JSONe.write_key(key)
-      puts "key saved as #{path}"
-      if options.env
-        if File.exist?('.env')
-          body = File.read(".env") 
-          body << "\nJSONE_KEY=#{JSONe.to_hex(key.public_key)}\n"
-          File.write(".env", body)
-        else
-          puts ".env - no such file, create one manually with:\n\n   JSONE_KEY=#{JSONe.to_hex(key.public_key)}\n\n"
-        end
+    path = JSONe.write_key(key)
+    puts "Key pair has been saved to #{path}"
+    if options.env
+      if File.exist?('.env')
+        body = File.read(".env") 
+        body << "\nJSONE_KEY=#{JSONe.to_hex(key.public_key)}\n"
+        File.write(".env", body)
+      else
+        puts ".env - no such file, create one manually with:\n\n   JSONE_KEY=#{JSONe.to_hex(key.public_key)}\n\n"
       end
     else
-      JSONe.print_key(key)
+      puts "You may want to add:\n\n   JSONE_KEY=#{JSONe.to_hex(key.public_key)}\n   export JSONE_KEY\n\nto your environment for convenience.\n"
     end
   end
 end
