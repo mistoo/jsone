@@ -1,0 +1,126 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'dotenv'
+require 'jsone'
+require 'commander/import'
+require 'dotenv'
+
+#require 'colorize'
+
+program :version, JSONe::VERSION
+program :description, 'jsone - JSON encrypted'
+program :help_formatter, :compact
+
+global_option('--verbose LEVEL', 'Verbosity') do |level| 
+  JSONe.verbose = level.to_i || 1 
+end
+
+
+module JSONe
+  module Cli
+    def self.get_key(pubkey)
+      unless pubkey
+        pubkey = ENV['JSONE_KEY']
+      end
+      return nil if pubkey.nil? || pubkey.empty?
+
+      key = JSONe.load_key(pubkey)
+      if key.nil?
+        STDERR.puts "#{pubkey}: no such key found"
+        exit!
+      end
+      key
+    end
+    
+    def self.encrypt_file(path, key, inplace: false)
+      JSONe.encrypt_file(path, key, inplace: inplace)
+    rescue JSON::ParserError => e
+      STDERR.puts "#{path}: parse error: #{e.message}"
+    end
+
+    def self.decrypt_file(path)
+      JSONe.decrypt_file(path)
+    rescue JSON::ParserError => e
+      STDERR.puts "#{path}: parse error: #{e.message}"
+    end
+    
+    def self.process_args(args, extension = ".json")
+      args.each do |path|
+        if File.directory?(path)
+          pattern = File.join(path, "**/*#{extension}")
+          puts pattern
+          Dir.glob(pattern) do |file|
+            puts file
+            yield file
+          end
+        else
+          yield path
+        end
+      end
+    end
+  end
+end
+
+def check_args!(cmd, args, needed)
+  if args.size < needed
+    puts "#{cmd}: command needs at least #{needed} argument(s)"
+    exit 1
+  end
+end
+
+command :keygen do |c|
+  c.syntax = 'jsone keygen SURVEY'
+  c.summary = 'Generates new key pair'
+  c.option '-w', "Write key to #{JSONe::KEYDIR}"
+  c.option '--env', "Add generated key to .env"
+  c.action do |args, options|
+    check_args! :keygen, args, 0
+    key = JSONe.gen_key
+    if options.w
+      path = JSONe.write_key(key)
+      puts "key saved as #{path}"
+      if options.env
+        if File.exist?('.env')
+          body = File.read(".env") 
+          body << "\nJSONE_KEY=#{JSONe.to_hex(key.public_key)}\n"
+          File.write(".env", body)
+        else
+          puts ".env - no such file, create one manually with:\n\n   JSONE_KEY=#{JSONe.to_hex(key.public_key)}\n\n"
+        end
+      end
+    else
+      JSONe.print_key(key)
+    end
+  end
+end
+
+command :encrypt do |c|
+  c.syntax = 'jsone encrypt FILE...'
+  c.summary = 'Encrypts FILE with '
+  c.option '--key KEY', "Use KEY (default is #{ENV['JSONE_KEY']}"
+  c.option '--inplace', "Replace file content"
+  c.action do |args, options|
+    check_args! :encrypt, args, 0
+
+    key = JSONe::Cli.get_key(options.key)
+    JSONe::Cli.process_args(args) do |path|
+      JSONe::Cli.encrypt_file(path, key, inplace: options.inplace)
+    end
+  end
+end
+
+command :decrypt do |c|
+  c.syntax = 'jsone decrypt FILE...'
+  c.summary = 'Decrypt FILE with '
+  c.action do |args, options|
+    check_args! :decrypt, args, 0
+    JSONe::Cli.process_args(args, ".json.enc") do |path|
+      JSONe::Cli.decrypt_file(path)
+    end
+  end
+end
+
+
+alias_command :e, :encrypt
+alias_command :d, :decrypt
