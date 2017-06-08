@@ -3,9 +3,11 @@
 require 'rubygems'
 require 'dotenv'
 require 'jsone'
+require 'jsone/version'
 require 'commander/import'
 require 'dotenv'
 
+Dotenv.load
 #require 'colorize'
 
 program :version, JSONe::VERSION

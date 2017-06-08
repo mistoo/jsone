@@ -143,12 +143,12 @@ module JSONe
     hash
   end
 
-  def self.encrypt_file(path, key = nil, inplace: false, force: false)
+  def self.encrypt_file(path, key = nil, force: false)
     hash = JSON.parse(File.read(path))
     key = key_from_hash(hash) if key.nil?
 
-    dest = inplace ? path : "#{path}e"
-    if File.exist?(dest) && !force && !inplace
+    dest = "#{path}e"
+    if File.exist?(dest) && !force
       begin
         merged = merge_with_encrypted(dest, hash, key)
         if merged.size.zero?
@@ -163,23 +163,20 @@ module JSONe
     log{ "* encrypting #{path} with #{to_hex(key.public_key)}" }
     encrypted = encrypt(hash, key)
 
-    dest = inplace ? path : "#{path}e"
     File.write(dest, JSON.pretty_generate(encrypted))
     dest
   end
 
-  def self.decrypt_file(path)
+  def self.decrypt_file(path, stdout: false)
+    unless path.end_with?('.jsone')
+      raise ArgumentError, "encrypted file must have .jsone extension"
+    end
+    dest = path.sub(/e$/, '')
+    fail if dest == path
+    
     log{ "* decrypting #{path}" }
     hash = JSON.parse(File.read(path))
-    hash.freeze
-    
     decrypted = decrypt(hash)
-
-    if path.end_with?('\.jsone')
-      dest = path.sub(/e$/, '')
-    else
-      dest = path
-    end
 
     if hash != decrypted
       File.write(dest, JSON.pretty_generate(decrypted))
