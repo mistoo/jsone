@@ -64,7 +64,7 @@ command :encrypt do |c|
     check_args! :encrypt, args, 0
 
     key = JSONe::Cli.get_key(options.key)
-    JSONe::Cli.process_args(args) do |path|
+    JSONe::Cli.process_args(args, '.json') do |path|
       JSONe::Cli.encrypt_file(path, key, force: options.force, output: options.stdout ? STDOUT : nil)
     end
   end
@@ -73,9 +73,9 @@ end
 command :decrypt do |c|
   c.syntax = 'jsone decrypt FILE...'
   c.summary = 'Decrypt FILE with '
-  c.action do |args, _options|
+  c.action do |args, options|
     check_args! :decrypt, args, 0
-    JSONe::Cli.process_args(args, '.json.enc') do |path|
+    JSONe::Cli.process_args(args, JSONe::ENCRYPTED_EXTENSION) do |path|
       JSONe::Cli.decrypt_file(path, output: options.stdout ? STDOUT : nil)
     end
   end

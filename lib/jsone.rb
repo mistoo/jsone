@@ -6,6 +6,7 @@ require "rbnacl"
 require "hashdiff"
 
 module JSONe
+  ENCRYPTED_EXTENSION = '.jsone'.freeze
   PUBLICKEY_KEY = "__jsone_public_key".freeze
   ARRAY_KEY = "__jsone_array".freeze
   CIPHER_PREFIX = "__!jsone__".freeze
@@ -124,7 +125,7 @@ module JSONe
     key
   end
   private_class_method :key_from_hash
-  
+
   def self.decrypt(hash, key = nil)
     key = key_from_hash(hash) if key.nil?
     decrypt_hash(box(key), hash)
