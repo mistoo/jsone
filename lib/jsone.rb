@@ -105,8 +105,10 @@ module JSONe
     encrypted = encrypt_hash(box(key), hash)
     if add_key
       e = {}
-      e[PUBLICKEY_KEY] = to_hex(key.public_key)
+      hex_key = to_hex(key.public_key)
+      e[PUBLICKEY_KEY] = ''     # top placeholder
       e.merge! encrypted
+      e[PUBLICKEY_KEY] = hex_key
       encrypted = e
     end
     encrypted
@@ -160,7 +162,7 @@ module JSONe
         end
         hash = merged
       rescue
-        raise
+        log{ "* failed to decrypt previously encrypted file; data will be re-encrypted" } 
       end
     end
 
