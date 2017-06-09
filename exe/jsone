@@ -13,28 +13,24 @@ program :version, JSONe::VERSION
 program :description, 'jsone - JSON encrypted'
 program :help_formatter, :compact
 
-verbose = 0 
+verbose = 0
 global_option('-v', '--verbose', 'Be verbose') do
   verbose += 1
   JSONe.verbose = verbose
 end
 
-$output = nil
-global_option('-1', '--stdout', 'Print result on stdout') do 
-  $output = STDOUT
-end
+global_option('-1', '--stdout', 'Print result on stdout')
 
 def check_args!(cmd, args, needed)
-  if args.size < needed
-    puts "#{cmd}: command needs at least #{needed} argument(s)"
-    exit 1
-  end
+  return unless args.size < needed
+  puts "#{cmd}: command needs at least #{needed} argument(s)"
+  exit 1
 end
 
 command :keygen do |c|
   c.syntax = 'jsone keygen SURVEY'
   c.summary = 'Generate key pair'
-  c.option '--env', "Add generated key to .env"
+  c.option '--env', 'Add generated key to .env'
   c.action do |args, options|
     check_args! :keygen, args, 0
     key = JSONe.gen_key
@@ -46,9 +42,9 @@ command :keygen do |c|
       puts "Key pair has been saved to #{path}"
       if options.env
         if File.exist?('.env')
-          body = File.read(".env") 
+          body = File.read('.env')
           body << "\nJSONE_KEY=#{JSONe.to_hex(key.public_key)}\n"
-          File.write(".env", body)
+          File.write('.env', body)
         else
           puts ".env - no such file, create one manually with:\n\n   JSONE_KEY=#{JSONe.to_hex(key.public_key)}\n\n"
         end
@@ -63,13 +59,13 @@ command :encrypt do |c|
   c.syntax = 'jsone encrypt FILE...'
   c.summary = 'Encrypts FILE with '
   c.option '--key KEY', "Use KEY (default is #{ENV['JSONE_KEY']}"
-  c.option '--force', "Force re-encryption already encrypted values"
+  c.option '--force', 'Force re-encryption already encrypted values'
   c.action do |args, options|
     check_args! :encrypt, args, 0
 
     key = JSONe::Cli.get_key(options.key)
     JSONe::Cli.process_args(args) do |path|
-      JSONe::Cli.encrypt_file(path, key, force: options.force)
+      JSONe::Cli.encrypt_file(path, key, force: options.force, output: options.stdout ? STDOUT : nil)
     end
   end
 end
@@ -77,14 +73,13 @@ end
 command :decrypt do |c|
   c.syntax = 'jsone decrypt FILE...'
   c.summary = 'Decrypt FILE with '
-  c.action do |args, options|
+  c.action do |args, _options|
     check_args! :decrypt, args, 0
-    JSONe::Cli.process_args(args, ".json.enc") do |path|
-      JSONe::Cli.decrypt_file(path)
+    JSONe::Cli.process_args(args, '.json.enc') do |path|
+      JSONe::Cli.decrypt_file(path, output: options.stdout ? STDOUT : nil)
     end
   end
 end
-
 
 alias_command :e, :encrypt
 alias_command :d, :decrypt

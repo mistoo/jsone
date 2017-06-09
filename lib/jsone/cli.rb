@@ -1,9 +1,7 @@
 module JSONe
   module Cli
     def self.get_key(pubkey)
-      unless pubkey
-        pubkey = ENV['JSONE_KEY']
-      end
+      pubkey = ENV["JSONE_KEY"] unless pubkey
       return nil if pubkey.nil? || pubkey.empty?
 
       key = JSONe.load_key(pubkey)
@@ -13,19 +11,19 @@ module JSONe
       end
       key
     end
-    
-    def self.encrypt_file(path, key, force: false)
-      JSONe.encrypt_file(path, key, output: $output, force: force)
+
+    def self.encrypt_file(path, key, force: false, output: nil)
+      JSONe.encrypt_file(path, key, output: output, force: force)
     rescue JSON::ParserError => e
       STDERR.puts "#{path}: parse error: #{e.message}"
     end
 
-    def self.decrypt_file(path)
-      JSONe.decrypt_file(path, output: $output)
+    def self.decrypt_file(path, output: nil)
+      JSONe.decrypt_file(path, output: output)
     rescue JSON::ParserError => e
       STDERR.puts "#{path}: parse error: #{e.message}"
     end
-    
+
     def self.process_args(args, extension = ".json")
       args.each do |path|
         if File.directory?(path)
