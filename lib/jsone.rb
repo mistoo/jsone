@@ -89,7 +89,7 @@ module JSONe
     hash.each do |key, val|
       if val.is_a?(String) && val.start_with?(CIPHER_PREFIX)
         c = Base64.decode64(val[CIPHER_PREFIX.size..-1])
-        val = box.decrypt(c)
+        val = box.decrypt(c).force_encoding('utf-8')
       elsif val.is_a?(Hash)
         val = decrypt_hash(box, val)
       elsif val.is_a?(Array)
@@ -151,7 +151,7 @@ module JSONe
   private_class_method :merge_with_encrypted
         
   def self.read_json(path)
-    hash = JSON.parse(File.read(path))
+    hash = JSON.parse(File.read(path, :encoding => 'utf-8'))
     hash = Hash[ARRAY_KEY, hash] if hash.is_a?(Array)
     hash
   end
@@ -201,11 +201,11 @@ module JSONe
     dest = path.sub(/e$/, "")
     raise "internal error" if dest == path
 
-    log { "* decrypting #{path}" }
-    hash = JSON.parse(File.read(path))
+    log { "* decrypting #{path} to #{dest}" }
+    hash = read_json(path)
     decrypted = decrypt(hash)
     decrypted = decrypted[ARRAY_KEY] if decrypted.key?(ARRAY_KEY)
-
+    
     write_hash(decrypted, output: output || dest)
   end
 end
