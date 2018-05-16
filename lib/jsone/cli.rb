@@ -16,21 +16,34 @@ module JSONe
       JSONe.encrypt_file(path, key, output: output, force: force)
     rescue JSON::ParserError => e
       STDERR.puts "#{path}: parse error: #{e.message}"
+      false
     end
 
     def self.decrypt_file(path, output: nil)
       JSONe.decrypt_file(path, output: output)
     rescue JSON::ParserError => e
       STDERR.puts "#{path}: parse error: #{e.message}"
+      false
+    end
+
+    def self.diff_file(path, key)
+      diff = JSONe.diff_file(path, key)
+      diff.each do |op, key, *values|
+        puts "#{op} #{key}: #{values.is_a?(Array) ? values.join(' => ') : values}"
+      end
+      diff.size > 0
+    rescue JSON::ParserError => e
+      STDERR.puts "#{path}: parse error: #{e.message}"
+      nil
     end
 
     def self.process_args(args, extension = ".json")
       args.each do |path|
         if File.directory?(path)
           pattern = File.join(path, "**/*#{extension}")
-          puts pattern
+          puts pattern if ENV['VERBOSE']
           Dir.glob(pattern) do |file|
-            puts file
+            puts file if ENV['VERBOSE']
             yield file
           end
         else

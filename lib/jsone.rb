@@ -26,7 +26,7 @@ module JSONe
     puts(yield) if @verbose > 0
   end
   private_class_method :log
-  
+
   def self.gen_key
     RbNaCl::PrivateKey.generate
   end
@@ -34,7 +34,7 @@ module JSONe
   def self.to_hex(key)
     key.to_bytes.unpack("H*").first
   end
-  
+
 
   def self.write_key(key, dir: KEYDIR)
     hex = to_hex(key.public_key)
@@ -60,7 +60,7 @@ module JSONe
     RbNaCl::SimpleBox.from_keypair(key.public_key, key)
   end
   private_class_method :box
-  
+
   def self.encrypt_hash(box, hash)
     encrypted = {}
     hash.each do |key, val|
@@ -83,7 +83,7 @@ module JSONe
     encrypted
   end
   private_class_method :encrypt_hash
-  
+
   def self.decrypt_hash(box, hash)
     decrypted = {}
     hash.each do |key, val|
@@ -103,7 +103,7 @@ module JSONe
     decrypted
   end
   private_class_method :decrypt_hash
-  
+
   def self.encrypt(hash, key, add_key: true)
     encrypted = encrypt_hash(box(key), hash)
     if add_key
@@ -140,7 +140,7 @@ module JSONe
 
     if encrypted[PUBLICKEY_KEY] == to_hex(key.public_key)
       if diff.size.zero?
-        
+
         hash = {}
       else
         hash = HashDiff.patch!(encrypted, diff)
@@ -149,14 +149,14 @@ module JSONe
     hash
   end
   private_class_method :merge_with_encrypted
-        
+
   def self.read_json(path)
     hash = JSON.parse(File.read(path, :encoding => 'utf-8'))
     hash = Hash[ARRAY_KEY, hash] if hash.is_a?(Array)
     hash
   end
   private_class_method :read_json
-  
+
   def self.write_hash(hash, output: nil)
     json = JSON.pretty_generate(hash)
 
@@ -171,7 +171,7 @@ module JSONe
     end
   end
   private_class_method :write_hash
-  
+
   def self.encrypt_file(path, key = nil, force: false, output: nil)
     hash = read_json(path)
     key = key_from_hash(hash) if key.nil?
@@ -196,7 +196,7 @@ module JSONe
     write_hash(encrypted, output: output || dest)
   end
 
-  def self.decrypt_file(path, output: nil)
+  def self.decrypt_file(path, output: nil, force: true)
     raise ArgumentError, "encrypted file without .jsone extension" unless path.end_with?(".jsone")
     dest = path.sub(/e$/, "")
     raise "internal error" if dest == path
@@ -205,7 +205,21 @@ module JSONe
     hash = read_json(path)
     decrypted = decrypt(hash)
     decrypted = decrypted[ARRAY_KEY] if decrypted.key?(ARRAY_KEY)
-    
+
     write_hash(decrypted, output: output || dest)
+  end
+
+  def self.diff_file(path, key = nil)
+    hash = read_json(path)
+    key = key_from_hash(hash) if key.nil?
+
+    dest = "#{path}e"
+    return nil unless File.exist?(dest)
+
+    encrypted = JSON.parse(File.read(dest))
+    decrypted = decrypt(encrypted)
+
+    diff = HashDiff.diff(decrypted, hash).reject { |e| e[1] == PUBLICKEY_KEY }
+    diff
   end
 end

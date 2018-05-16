@@ -19,6 +19,12 @@ global_option('-v', '--verbose', 'Be verbose') do
   JSONe.verbose = verbose
 end
 
+global_option('-r DIR', '--root DIR', 'Load .env from DIR/.env') do |dir|
+  path = "#{dir}/.env"
+  raise ArgumentError, "#{path}: no such file" unless File.exist?(path)
+  Dotenv.load(path)
+end
+
 global_option('-1', '--stdout', 'Print result on stdout')
 
 def check_args!(cmd, args, needed)
@@ -59,12 +65,17 @@ command :encrypt do |c|
   c.syntax = 'jsone encrypt FILE...'
   c.summary = 'Encrypts FILE with '
   c.option '--key KEY', "Use KEY (default is #{ENV['JSONE_KEY']}"
-  c.option '--force', 'Force re-encryption already encrypted values'
+  c.option '--force', 'Force re-encryption already encrypted files'
+  c.option '--ifnewer', 'Skip already encrypted files and their mtime is greater than original'
   c.action do |args, options|
     check_args! :encrypt, args, 0
 
     key = JSONe::Cli.get_key(options.key)
     JSONe::Cli.process_args(args, '.json') do |path|
+      if options.ifnewer && File.exist?("#{path}e") && File.mtime("#{path}e") > File.mtime(path)
+        puts "jsone: #{path}: skipped" if options.verbose
+        next
+      end
       JSONe::Cli.encrypt_file(path, key, force: options.force, output: options.stdout ? STDOUT : nil)
     end
   end
@@ -76,8 +87,23 @@ command :decrypt do |c|
   c.action do |args, options|
     check_args! :decrypt, args, 0
     JSONe::Cli.process_args(args, JSONe::ENCRYPTED_EXTENSION) do |path|
-      JSONe::Cli.decrypt_file(path, output: options.stdout ? STDOUT : nil)
+      JSONe::Cli.decrypt_file(path, output: options.stdout ? STDOUT : nil, force: false)
     end
+  end
+end
+
+command :diff do |c|
+  c.syntax = 'jsone diff FILE'
+  c.summary = 'Display differences with FILE and it\'s encrypted content (if exists)'
+  c.action do |args, options|
+    check_args! :diff, args, 0
+    key = JSONe::Cli.get_key(options.key)
+
+    path = args.first
+    raise ArgumentError, "#{path}: no such file" unless File.exist?(path)
+    raise ArgumentError, "#{path}: need .json" unless File.extname(path) == '.json'
+
+    exit(1) if JSONe::Cli.diff_file(path, key)
   end
 end
 
