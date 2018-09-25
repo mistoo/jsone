@@ -6,49 +6,51 @@ require "rbnacl"
 require "hashdiff"
 
 module JSONe
-  ENCRYPTED_EXTENSION = '.jsone'.freeze
-  PUBLICKEY_KEY = "__jsone_public_key".freeze
-  ARRAY_KEY = "__jsone_array".freeze
-  CIPHER_PREFIX = "__!jsone__".freeze
-  KEYDIR = ENV["JSONE_KEYDIR"] || "/etc/jsone/keys"
+  extend self
+  ENCRYPTED_EXTENSION = '.jsone'
+  RAW_EXTENSION = '.json'
+  PUBLICKEY_KEY = "__jsone_public_key"
+  ARRAY_KEY = "__jsone_array"
+  CIPHER_PREFIX = "__!jsone__"
+  KEYDIR = ENV.fetch("JSONE_KEYDIR", "/etc/jsone/keys")
   @verbose = 0
 
-  def self.verbose=(v)
+  def verbose=(v)
     @verbose = v
   end
 
-  def self.debug
+  def debug
     STDERR.puts "[JSONe:debug] #{yield}" if @verbose > 1
   end
   private_class_method :debug
 
-  def self.log
+  def log
     puts(yield) if @verbose > 0
   end
   private_class_method :log
 
-  def self.gen_key
+  def gen_key
     RbNaCl::PrivateKey.generate
   end
 
-  def self.to_hex(key)
+  def to_hex(key)
     key.to_bytes.unpack("H*").first
   end
 
 
-  def self.write_key(key, dir: KEYDIR)
+  def write_key(key, dir: KEYDIR)
     hex = to_hex(key.public_key)
     dest = "#{dir}/#{hex}"
     File.write(dest, to_hex(key))
     dest
   end
 
-  def self.print_key(key)
+  def print_key(key)
     puts "public:  #{to_hex(key.public_key)}"
     puts "private: #{to_hex(key)}"
   end
 
-  def self.load_key(public_key_hex, dir: KEYDIR)
+  def load_key(public_key_hex, dir: KEYDIR)
     path = "#{dir}/#{public_key_hex}"
     return nil unless File.exist?(path)
     hex = File.read(path)
@@ -56,55 +58,59 @@ module JSONe
     RbNaCl::Boxes::Curve25519XSalsa20Poly1305::PrivateKey.new(bin)
   end
 
-  def self.box(key)
+  def box(key)
     RbNaCl::SimpleBox.from_keypair(key.public_key, key)
   end
   private_class_method :box
 
-  def self.encrypt_hash(box, hash)
-    encrypted = {}
-    hash.each do |key, val|
-      skey = key.to_s
-      if skey != ARRAY_KEY && skey.start_with?("__")
-        # noop
-      elsif val.is_a?(String) && !val.start_with?(CIPHER_PREFIX)
-        cipher = Base64.encode64(box.encrypt(val))
-        val = "#{CIPHER_PREFIX}#{cipher}"
-      elsif val.is_a?(Hash)
-        val = encrypt_hash(box, val)
-      elsif val.is_a?(Array)
-        val = val.map do |v|
-          v = encrypt_hash(box, v) if v.is_a?(Hash)
-          v
-        end
+  def encrypt_value(box, value)
+    if value.is_a?(String)
+      unless value.start_with?(CIPHER_PREFIX)
+        cipher = Base64.encode64(box.encrypt(value))
+        value = "#{CIPHER_PREFIX}#{cipher}"
       end
-      encrypted[key] = val
+    elsif value.is_a?(Hash)
+      value.each do |key, val|
+        skey = key.to_s
+        next if skey == ARRAY_KEY || skey.start_with?("__")
+        value[key] = encrypt_value(box, val)
+      end
+    elsif value.is_a?(Array)
+      value.map!{ |val| encrypt_value(box, val) }
     end
-    encrypted
+    value
+  end
+  private_class_method :encrypt_value
+
+  def encrypt_hash(box, hash)
+    dest = Marshal.restore(Marshal.dump(hash))
+    return encrypt_value(box, dest)
   end
   private_class_method :encrypt_hash
 
-  def self.decrypt_hash(box, hash)
-    decrypted = {}
-    hash.each do |key, val|
-      if val.is_a?(String) && val.start_with?(CIPHER_PREFIX)
-        c = Base64.decode64(val[CIPHER_PREFIX.size..-1])
-        val = box.decrypt(c).force_encoding('utf-8')
-      elsif val.is_a?(Hash)
-        val = decrypt_hash(box, val)
-      elsif val.is_a?(Array)
-        val = val.map do |v|
-          v = decrypt_hash(box, v) if v.is_a?(Hash)
-          v
-        end
+  def decrypt_value(box, value)
+    if value.is_a?(String)
+      if value.start_with?(CIPHER_PREFIX)
+        c = Base64.decode64(value[CIPHER_PREFIX.size..-1])
+        value = box.decrypt(c).force_encoding('utf-8')
       end
-      decrypted[key] = val
+    elsif value.is_a?(Hash)
+      value.each do |key, val|
+        value[key] = decrypt_value(box, val)
+      end
+    elsif value.is_a?(Array)
+      value.map!{ |val| decrypt_value(box, val) }
     end
-    decrypted
+    value
+  end
+
+  def decrypt_hash(box, hash)
+    dest = Marshal.restore(Marshal.dump(hash))
+    return decrypt_value(box, dest)
   end
   private_class_method :decrypt_hash
 
-  def self.encrypt(hash, key, add_key: true)
+  def encrypt(hash, key, add_key: true)
     encrypted = encrypt_hash(box(key), hash)
     if add_key
       e = {}
@@ -117,7 +123,7 @@ module JSONe
     encrypted
   end
 
-  def self.key_from_hash(hash)
+  def key_from_hash(hash)
     public_hex = hash[PUBLICKEY_KEY]
     raise "no key found (#{PUBLICKEY_KEY})" if public_hex.nil?
     key = load_key(public_hex)
@@ -126,12 +132,12 @@ module JSONe
   end
   private_class_method :key_from_hash
 
-  def self.decrypt(hash, key = nil)
+  def decrypt(hash, key = nil)
     key = key_from_hash(hash) if key.nil?
     decrypt_hash(box(key), hash)
   end
 
-  def self.merge_with_encrypted(enc_path, hash, key)
+  def merge_with_encrypted(enc_path, hash, key)
     encrypted = JSON.parse(File.read(enc_path))
     decrypted = decrypt(encrypted)
 
@@ -150,14 +156,14 @@ module JSONe
   end
   private_class_method :merge_with_encrypted
 
-  def self.read_json(path)
+  def read_json(path)
     hash = JSON.parse(File.read(path, :encoding => 'utf-8'))
     hash = Hash[ARRAY_KEY, hash] if hash.is_a?(Array)
     hash
   end
   private_class_method :read_json
 
-  def self.write_hash(hash, output: nil)
+  def write_hash(hash, output: nil)
     json = JSON.pretty_generate(hash)
 
     if output.is_a?(IO)
@@ -172,16 +178,28 @@ module JSONe
   end
   private_class_method :write_hash
 
-  def self.encrypt_file(path, key = nil, force: false, output: nil)
+  def encrypted_path(path)
+    ext = File.extname(path)
+    raise ArgumentError, "#{path} must end with #{RAW_EXTENSION}" if ext != RAW_EXTENSION
+    path.sub(/#{ext}$/, ENCRYPTED_EXTENSION)
+  end
+
+  def raw_path(path)
+    ext = File.extname(path)
+    raise ArgumentError, "#{path} must end with #{ENCRYPTED_EXTENSION}" if ext != ENCRYPTED_EXTENSION
+    path.sub(/#{ext}$/, RAW_EXTENSION)
+  end
+
+  def encrypt_file(path, key = nil, force: false, output: nil)
     hash = read_json(path)
     key = key_from_hash(hash) if key.nil?
 
-    dest = "#{path}e"
+    dest = encrypted_path(path)
     if File.exist?(dest) && !force
       begin
         merged = merge_with_encrypted(dest, hash, key)
         if merged.size.zero?
-          log { "* #{dest}: file unchanged" }
+          log { "* #{dest}: file contents unchanged" }
           return dest
         end
         hash = merged
@@ -196,9 +214,8 @@ module JSONe
     write_hash(encrypted, output: output || dest)
   end
 
-  def self.decrypt_file(path, output: nil, force: true)
-    raise ArgumentError, "encrypted file without .jsone extension" unless path.end_with?(".jsone")
-    dest = path.sub(/e$/, "")
+  def decrypt_file(path, output: nil, force: true)
+    dest = raw_path(path)
     raise "internal error" if dest == path
 
     log { "* decrypting #{path} to #{dest}" }
@@ -209,11 +226,11 @@ module JSONe
     write_hash(decrypted, output: output || dest)
   end
 
-  def self.diff_file(path, key = nil)
+  def diff_file(path, key = nil)
     hash = read_json(path)
     key = key_from_hash(hash) if key.nil?
 
-    dest = "#{path}e"
+    dest = encrypted_path(path)
     return nil unless File.exist?(dest)
 
     encrypted = JSON.parse(File.read(dest))

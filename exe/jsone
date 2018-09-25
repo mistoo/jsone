@@ -61,18 +61,67 @@ command :keygen do |c|
   end
 end
 
+command :process do |c|
+  c.syntax = 'jsone process FILE...'
+  c.summary = 'Encrypts/decrypts FILE'
+  c.option '--key KEY', "Use KEY (default is #{ENV['JSONE_KEY']}"
+  c.option '--force', 'Force re-de/encryption (regardless mtime)'
+  c.action do |args, options|
+    check_args! :process, args, 1
+    key = JSONe::Cli.get_key(options.key)
+
+    take_action = proc do |path, dest|
+      take = true
+      if !options.force && File.exist?(dest) && File.mtime(dest) > File.mtime(path)
+        puts "jsone: #{path}: #{File.basename(dest)} is newer, skipped" if options.verbose
+        take = false
+      end
+      take
+    end
+
+    ok = true
+    output = options.stdout ? STDOUT : nil
+
+    args.each do |path|
+      unless File.exist?(path)
+        puts "jsone: #{path}: no such file"
+        ok = false
+        next
+      end
+
+      ext = File.extname(path)
+
+      if ext == JSONe::RAW_EXTENSION
+        dest = JSONe.encrypted_path(path)
+        if take_action.(path, dest)
+          JSONe::Cli.encrypt_file(path, key, force: options.force, output: output)
+        end
+      elsif ext == JSONe::ENCRYPTED_EXTENSION
+        dest = JSONe.raw_path(path)
+        if take_action.(path, dest)
+          JSONe::Cli.decrypt_file(path, output: output, force: options.force)
+        end
+      else
+        puts "jsone: #{path}: must be #{JSONe::RAW_EXTENSION}/#{JSONe::ENCRYPTED_EXTENSION}"
+        ok = false
+      end
+    end
+    ok
+  end
+end
+
 command :encrypt do |c|
   c.syntax = 'jsone encrypt FILE...'
-  c.summary = 'Encrypts FILE with '
+  c.summary = 'Encrypts FILE'
   c.option '--key KEY', "Use KEY (default is #{ENV['JSONE_KEY']}"
   c.option '--force', 'Force re-encryption already encrypted files'
   c.option '--ifnewer', 'Skip already encrypted files and their mtime is greater than original'
   c.action do |args, options|
     check_args! :encrypt, args, 0
-
     key = JSONe::Cli.get_key(options.key)
-    JSONe::Cli.process_args(args, '.json') do |path|
-      if options.ifnewer && File.exist?("#{path}e") && File.mtime("#{path}e") > File.mtime(path)
+    JSONe::Cli.process_args(args, JSONe::RAW_EXTENSION) do |path|
+      dest = JSONe.encrypted_path(path)
+      if options.ifnewer && File.exist?(dest) && File.mtime(dest) > File.mtime(path)
         puts "jsone: #{path}: skipped" if options.verbose
         next
       end
@@ -83,7 +132,7 @@ end
 
 command :decrypt do |c|
   c.syntax = 'jsone decrypt FILE...'
-  c.summary = 'Decrypt FILE with '
+  c.summary = 'Decrypt FILE '
   c.action do |args, options|
     check_args! :decrypt, args, 0
     JSONe::Cli.process_args(args, JSONe::ENCRYPTED_EXTENSION) do |path|
@@ -101,7 +150,7 @@ command :diff do |c|
 
     path = args.first
     raise ArgumentError, "#{path}: no such file" unless File.exist?(path)
-    raise ArgumentError, "#{path}: need .json" unless File.extname(path) == '.json'
+    raise ArgumentError, "#{path}: need #{JSONe::RAW_EXTENSION}" unless File.extname(path) == JSONe::RAW_EXTENSION
 
     exit(1) if JSONe::Cli.diff_file(path, key)
   end
@@ -109,3 +158,5 @@ end
 
 alias_command :e, :encrypt
 alias_command :d, :decrypt
+
+default_command :process
