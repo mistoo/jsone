@@ -72,7 +72,6 @@ module JSONe
     elsif value.is_a?(Hash)
       value.each do |key, val|
         skey = key.to_s
-        next if skey == ARRAY_KEY || skey.start_with?("__")
         value[key] = encrypt_value(box, val)
       end
     elsif value.is_a?(Array)

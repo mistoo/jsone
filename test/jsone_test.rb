@@ -145,4 +145,25 @@ class JSONeTest < Minitest::Test
     assert_equal hash['b'] == hash2['b'], false # new key
     assert_equal hash2[JSONe::PUBLICKEY_KEY], JSONe.to_hex(new_key.public_key)
   end
+
+  def test_file_encryption_array
+    key = JSONe.gen_key
+    key_path = JSONe.write_key(key)
+
+    a = [{ "foo" => "foo" }]
+    src = a_json_file(a)
+
+    dest = JSONe.encrypt_file(src, key)
+    hash = JSON.parse(File.read(dest))
+
+    assert_equal hash['__jsone_array'].is_a?(Array), true
+    assert_equal JSON.generate(hash['__jsone_array']) == JSON.generate(a), false
+    assert_equal hash['__jsone_array'].first["foo"].start_with?('__!jsone'), true
+
+    FileUtils.rm_f(src)
+    JSONe.decrypt_file(dest)
+    decrypted = JSON.parse(File.read(src))
+    #decrypted = JSONe.decrypt(hash, key)
+    assert_equal decrypted, a
+  end
 end
