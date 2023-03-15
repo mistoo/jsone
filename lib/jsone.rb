@@ -140,7 +140,7 @@ module JSONe
     encrypted = JSON.parse(File.read(enc_path))
     decrypted = decrypt(encrypted)
 
-    diff = HashDiff.diff(decrypted, hash).reject { |e| e[1] == PUBLICKEY_KEY }
+    diff = Hashdiff.diff(decrypted, hash).reject { |e| e[1] == PUBLICKEY_KEY }
     debug { "prev #{decrypted}\ncurrent #{hash}\ndiff= #{diff}" }
 
     if encrypted[PUBLICKEY_KEY] == to_hex(key.public_key)
@@ -148,7 +148,7 @@ module JSONe
 
         hash = {}
       else
-        hash = HashDiff.patch!(encrypted, diff)
+        hash = Hashdiff.patch!(encrypted, diff)
       end
     end
     hash
@@ -235,7 +235,7 @@ module JSONe
     encrypted = JSON.parse(File.read(dest))
     decrypted = decrypt(encrypted)
 
-    diff = HashDiff.diff(decrypted, hash).reject { |e| e[1] == PUBLICKEY_KEY }
+    diff = Hashdiff.diff(decrypted, hash).reject { |e| e[1] == PUBLICKEY_KEY }
     diff
   end
 end
